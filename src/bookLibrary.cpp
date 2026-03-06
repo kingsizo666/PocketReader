@@ -2,7 +2,7 @@
 
 // Hardcoded for now (later you’ll scan LittleFS /books)
 static const BookInfo BOOKS[] = {
-  { "Dune",          "/books/dune" },
+  { "Alice in Wonderland",          "/books/alice" },
   { "Hobbit",        "/books/hobbit" },
   { "Atomic Habits", "/books/atomic_habits" }
 };

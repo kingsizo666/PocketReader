@@ -25,7 +25,6 @@ static void onSelect(int idx) {
 }
 
 void mainMenuInit() {
-    Serial.begin(115200);
     display.landscape(); 
     display.clearMemory();
     display.update();

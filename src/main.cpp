@@ -2,10 +2,14 @@
 #include "mainMenu.h"
 #include "appState.h"
 #include "reader.h"
+#include <LittleFS.h>
 
 static AppScreen lastScreen = AppScreen::MainMenu;
 
 void setup() {
+  Serial.begin(115200);
+  bool ok = LittleFS.begin(true, "/littlefs", 10, "littlefs");
+  Serial.printf("LittleFS mount = %s\n", ok ? "OK" : "FAIL");
   mainMenuInit();
   mainMenuDraw();
   lastScreen = currentScreen;
