@@ -44,21 +44,70 @@ static int textWidthPx(const String& s) {
   return (int)w;
 }
 
+static inline String progressFilePath() {
+  return currentBookPath + "/progress.txt";
+}
+
+static void saveProgress() {
+  File f = LittleFS.open(progressFilePath(), "w");
+  if (!f) {
+    Serial.println("saveProgress: FAILED to open progress file");
+    return;
+  }
+
+  f.println((long)currentOffset);
+  f.println(pageNum);
+  f.close();
+
+  Serial.printf("saveProgress: path=%s offset=%ld page=%d\n",
+                progressFilePath().c_str(),
+                (long)currentOffset,
+                pageNum);
+}
+
+static void loadProgress() {
+  File f = LittleFS.open(progressFilePath(), "r");
+  if (!f) {
+    currentOffset = 0;
+    pageNum = 1;
+    Serial.printf("loadProgress: no file at %s, starting from page 1\n",
+                  progressFilePath().c_str());
+    return;
+  }
+
+  String offsetLine = f.readStringUntil('\n');
+  String pageLine   = f.readStringUntil('\n');
+  f.close();
+
+  currentOffset = offsetLine.toInt();
+  pageNum = pageLine.toInt();
+
+  if (currentOffset < 0) currentOffset = 0;
+  if (pageNum < 1) pageNum = 1;
+
+  Serial.printf("loadProgress: path=%s offset=%ld page=%d\n",
+                progressFilePath().c_str(),
+                (long)currentOffset,
+                pageNum);
+}
+
 // Force a clean white frame first to reduce ghosting
 static void beginFreshPage() {
   display.clearMemory();
 }
 
-static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset) {
+static int32_t paginateFromOffset(const String& filePath, int32_t startOffset, bool draw) {
   File f = LittleFS.open(filePath, "r");
   if (!f) {
-    beginFreshPage();
-    display.setFont();
-    display.setCursor(0, 16);
-    display.print("[Missing book.txt]");
-    display.setCursor(0, 32);
-    display.print(filePath);
-    display.update();
+    if (draw) {
+      beginFreshPage();
+      display.setFont();
+      display.setCursor(0, 16);
+      display.print("[Missing book.txt]");
+      display.setCursor(0, 32);
+      display.print(filePath);
+      display.update();
+    }
     return startOffset;
   }
 
@@ -67,16 +116,18 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
     f.seek(0);
   }
 
-  beginFreshPage();
+  if (draw) {
+    beginFreshPage();
 
-  display.setFont();
-  display.setTextWrap(true);
-  display.setCursor(MARGIN_X, HEADER_Y);
-  display.print("Page ");
-  display.print(pageNum);
+    display.setFont();
+    display.setTextWrap(true);
+    display.setCursor(MARGIN_X, HEADER_Y);
+    display.print("Page ");
+    display.print(pageNum);
 
-  display.setFont(&FreeSans9pt7b);
-  display.setTextWrap(false);
+    display.setFont(&FreeSans9pt7b);
+    display.setTextWrap(false);
+  }
 
   const int maxWidth = SCREEN_W - 2 * MARGIN_X - 2;
   const int lineH = (int)FreeSans9pt7b.yAdvance + 1;
@@ -94,8 +145,10 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
 
   auto flushLine = [&]() {
     if (line.isEmpty()) return;
-    display.setCursor(MARGIN_X, y);
-    display.print(line);
+    if (draw) {
+      display.setCursor(MARGIN_X, y);
+      display.print(line);
+    }
     y += lineH;
     line = "";
   };
@@ -159,8 +212,11 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
     if (c == ' ' || c == '\t' || c == '\n') {
       int32_t stopAt = commitWord(pos);
       if (stopAt >= 0) {
-        display.setFont();
-        display.update();
+        if (draw) {
+          display.setFont();
+          display.setTextWrap(true);
+          display.update();
+        }
         f.close();
         return stopAt;
       }
@@ -168,8 +224,11 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
       if (c == '\n') {
         flushLine();
         if (pageFull()) {
-          display.setFont();
-          display.update();
+          if (draw) {
+            display.setFont();
+            display.setTextWrap(true);
+            display.update();
+          }
           f.close();
           return pos;
         }
@@ -188,17 +247,23 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
   if (!pageFull()) {
     int32_t stopAt = commitWord((int32_t)f.position());
     if (stopAt >= 0) {
-      display.setFont();
-      display.update();
+      if (draw) {
+        display.setFont();
+        display.setTextWrap(true);
+        display.update();
+      }
       f.close();
       return stopAt;
     }
     flushLine();
   }
 
-  display.setFont();
-  display.setTextWrap(true);
-  display.update();
+  if (draw) {
+    display.setFont();
+    display.setTextWrap(true);
+    display.update();
+  }
+
   f.close();
 
   int32_t nextOffset = lastBreakOffset;
@@ -206,11 +271,42 @@ static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset)
   return nextOffset;
 }
 
-static void openBookAndReset() {
-  pageNum = 1;
-  currentOffset = 0;
-  nextOffsetAfterCurrentPage = 0;
+static int32_t renderPageFromOffset(const String& filePath, int32_t startOffset) {
+  return paginateFromOffset(filePath, startOffset, true);
+}
+
+static int32_t computeNextOffsetFrom(const String& filePath, int32_t startOffset) {
+  return paginateFromOffset(filePath, startOffset, false);
+}
+
+static void rebuildHistoryToCurrentPage() {
   historySize = 0;
+
+  if (currentOffset <= 0 || pageNum <= 1) {
+    return;
+  }
+
+  const String fp = bookFilePath();
+  int32_t offset = 0;
+  int page = 1;
+
+  while (page < pageNum && historySize < MAX_HISTORY) {
+    int32_t nextOffset = computeNextOffsetFrom(fp, offset);
+
+    if (nextOffset <= offset) {
+      break;
+    }
+
+    history[historySize++] = offset;
+    offset = nextOffset;
+    page++;
+  }
+}
+
+static void openBookAndReset() {
+  nextOffsetAfterCurrentPage = 0;
+  loadProgress();
+  rebuildHistoryToCurrentPage();
 }
 
 static void drawCurrentPage() {
@@ -231,6 +327,7 @@ void readerLoop() {
   btnNext.update();
 
   if (btnPrev.longPress(LONG_MS)) {
+    saveProgress();
     currentScreen = AppScreen::MainMenu;
     return;
   }
