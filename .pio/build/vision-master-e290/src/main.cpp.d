@@ -179,4 +179,4 @@
  C:/Users/kings/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/esp_hw_support/include/soc/esp32/spiram.h \
  C:/Users/kings/.platformio/packages/framework-arduinoespressif32/cores/esp32/io_pin_remap.h \
  C:/Users/kings/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
- src/mainMenu.h
+ src/mainMenu.h src/appState.h src/reader.h
