@@ -234,4 +234,4 @@
  .pio/libdeps/vision-master-e290/heltec-eink-modules/src/Displays/LCMEN2R13EFC1/LUTs/partial_bw.inc \
  .pio/libdeps/vision-master-e290/heltec-eink-modules/src/Displays/LCMEN2R13EFC1/LUTs/partial_wb.inc \
  .pio/libdeps/vision-master-e290/heltec-eink-modules/src/Displays/LCMEN2R13EFC1/LUTs/partial_ww.inc \
- src/mainMenu.h src/bookLibrary.h src/appState.h
+ src/mainMenu.h src/bookLibrary.h src/appState.h src/Button.h
