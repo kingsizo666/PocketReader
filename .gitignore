@@ -422,3 +422,5 @@ FodyWeavers.xsd
 .pio
 .pioenvs
 .piolibdeps
+
+data/
